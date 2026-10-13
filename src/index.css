@@ -1,0 +1,22 @@
+@import '@fontsource/roboto/400.css';
+@import '@fontsource/roboto/500.css';
+@import '@fontsource/roboto/700.css';
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+/* Keep long slugs and filenames from forcing horizontal scroll on a table. */
+img {
+  max-width: 100%;
+}

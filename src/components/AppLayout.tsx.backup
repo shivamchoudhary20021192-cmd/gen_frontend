@@ -1,0 +1,1065 @@
+﻿import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import LogoutIcon from '@mui/icons-material/Logout'
+import MenuIcon from '@mui/icons-material/Menu'
+import SearchIcon from '@mui/icons-material/Search'
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import MenuOpenIcon from '@mui/icons-material/MenuOpen'
+import MenuIcon2 from '@mui/icons-material/Menu'
+import {
+  AppBar,
+  Avatar,
+  Badge,
+  Box,
+  Chip,
+  Collapse,
+  Divider,
+  Drawer,
+  IconButton,
+  InputBase,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
+  Skeleton,
+  Stack,
+  Toolbar,
+  Tooltip,
+  Typography,
+  alpha,
+} from '@mui/material'
+import { useEffect, useMemo, useState } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/useAuth'
+import { useSidebar } from '../hooks/useSidebar'
+import { menuIcon } from '../navigation/icons'
+import { isImplemented } from '../navigation/routeRegistry'
+import { useNavigation, type MenuNode } from '../navigation/useNavigation'
+import { tokens } from '../theme'
+
+const DRAWER_WIDTH = 232
+const DRAWER_WIDTH_COLLAPSED = 64
+const TOPBAR_HEIGHT = 56
+/** Shopify caps its content column rather than letting it span a 27" monitor. */
+const CONTENT_MAX = 1000
+
+/**
+ * An item is clickable only when the server says it is available AND this
+ * build knows how to render it. Everything else shows greyed with a "Soon"
+ * chip â€” the shape of the product is visible without handing anyone a dead link.
+ */
+function isNavigable(node: MenuNode): boolean {
+  return node.status === 'available' && Boolean(node.route) && isImplemented(node.key)
+}
+
+function hasNavigableDescendant(node: MenuNode): boolean {
+  return isNavigable(node) || node.children.some(hasNavigableDescendant)
+}
+
+/**
+ * Check if current pathname matches a menu item route.
+ * Uses active_match patterns if provided, otherwise falls back to route matching.
+ * Patterns ending with $ are exact matches, others are prefix matches.
+ */
+function isRouteActive(node: MenuNode, pathname: string): boolean {
+  if (!node.route) return false
+  
+  // If active_match patterns are defined, use them
+  if (node.active_match && node.active_match.length > 0) {
+    return node.active_match.some(pattern => {
+      if (pattern.endsWith('
+
+export function AppLayout() {
+  const { admin, logout, isSuperAdmin } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const menu = useNavigation()
+  const sidebar = useSidebar()
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+
+  const sections = useMemo(() => menu.data?.sections ?? [], [menu.data])
+  const isCollapsed = sidebar.isCollapsed && !sidebar.isHovering
+  const drawerWidth = sidebar.width
+
+  // Auto-expand whichever group contains the current route, so a deep link
+  // lands with its parent already open.
+  useEffect(() => {
+    if (sections.length === 0) return
+    setExpanded((current) => {
+      const next = { ...current }
+      for (const section of sections) {
+        for (const item of section.items) {
+          if (item.children.length === 0) continue
+          const active = item.children.some((child) => isRouteActive(child, location.pathname))
+          if (active) next[item.key] = true
+        }
+      }
+      return next
+    })
+  }, [sections, location.pathname])
+
+  const initials = `${admin?.first_name?.[0] ?? ''}${admin?.last_name?.[0] ?? ''}`.toUpperCase()
+
+  const renderItem = (node: MenuNode, depth = 0) => {
+    const Icon = menuIcon(node.icon)
+    const navigable = isNavigable(node)
+    const children = node.children
+    const hasChildren = children.length > 0
+    const open = expanded[node.key] ?? false
+
+    // A group whose children are all unbuilt is itself not worth expanding.
+    const groupUsable = hasChildren && children.some(hasNavigableDescendant)
+    const disabled = !navigable && !groupUsable
+
+    // Apply icon color from database
+    const iconColor = node.icon_color || 'inherit'
+
+    const inner = (
+      <>
+        <ListItemIcon sx={{ 
+          minWidth: isCollapsed ? 0 : 26,
+          justifyContent: 'center',
+          color: iconColor,
+          mx: isCollapsed ? 'auto' : 0,
+        }}>
+          {node.badge ? (
+            <Badge
+              badgeContent={node.badge.count}
+              max={99}
+              color={node.badge.variant === 'default' ? 'primary' : node.badge.variant}
+              sx={{ '& .MuiBadge-badge': { fontSize: 9, height: 14, minWidth: 14 } }}
+            >
+              <Icon sx={{ fontSize: 18 }} />
+            </Badge>
+          ) : (
+            <Icon sx={{ fontSize: 18 }} />
+          )}
+        </ListItemIcon>
+        {!isCollapsed && (
+          <>
+            <ListItemText
+              primary={node.title}
+              slotProps={{
+                primary: {
+                  variant: 'body2',
+                  noWrap: true,
+                  sx: { fontWeight: 500, fontSize: 13 },
+                },
+              }}
+            />
+            {/* Keyboard Shortcut Display - Commented out for now */}
+            {/* {node.keyboard_shortcut && depth === 0 && (
+              <Chip
+                label={node.keyboard_shortcut}
+                size="small"
+                sx={{
+                  height: 17,
+                  fontSize: 10,
+                  bgcolor: alpha('#000', 0.06),
+                  mr: 0.5,
+                }}
+              />
+            )} */}
+            {disabled && (
+              <Chip
+                label="Soon"
+                sx={{ height: 17, fontSize: 10, bgcolor: '#DEDEDE', color: tokens.subdued, ml: 0.5 }}
+              />
+            )}
+            {/* Only show expand/collapse arrows when NOT collapsed */}
+            {hasChildren && (
+              open ? (
+                <ExpandLessIcon sx={{ fontSize: 16, color: tokens.faint }} />
+              ) : (
+                <ExpandMoreIcon sx={{ fontSize: 16, color: tokens.faint }} />
+              )
+            )}
+          </>
+        )}
+      </>
+    )
+
+    const sx = {
+      borderRadius: '8px',
+      minHeight: 32,
+      mb: '2px',
+      pl: isCollapsed ? 0.5 : (depth === 0 ? 1 : 3.25),
+      pr: isCollapsed ? 0.5 : 1,
+      py: 0.25,
+      justifyContent: isCollapsed ? 'center' : 'flex-start',
+      color: tokens.ink,
+      opacity: disabled ? 0.5 : 1,
+      transition: 'all 200ms ease',
+      '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+      '&.active': {
+        bgcolor: tokens.selected,
+        color: tokens.inkStrong,
+        boxShadow: '0 1px 2px rgba(26,26,26,0.12)',
+        '& .MuiListItemIcon-root': { color: tokens.inkStrong },
+        '& .MuiListItemText-primary': { fontWeight: 600 },
+      },
+    } as const
+
+    const button = navigable && !hasChildren ? (
+      <ListItemButton component={NavLink} to={node.route!} onClick={() => setMobileOpen(false)} sx={sx}>
+        {inner}
+      </ListItemButton>
+    ) : (
+      <Box component="span">
+        <ListItemButton
+          disabled={disabled}
+          onClick={() => {
+            if (hasChildren) {
+              setExpanded((current) => ({ ...current, [node.key]: !open }))
+              return
+            }
+            if (navigable) {
+              navigate(node.route!)
+              setMobileOpen(false)
+            }
+          }}
+          sx={{ ...sx, width: '100%' }}
+        >
+          {inner}
+        </ListItemButton>
+      </Box>
+    )
+
+    const tooltipContent = isCollapsed ? (
+      <Box>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          {node.title}
+        </Typography>
+        {node.hover_description && (
+          <Typography variant="caption" sx={{ opacity: 0.8 }}>
+            {node.hover_description}
+          </Typography>
+        )}
+      </Box>
+    ) : null
+
+    return (
+      <Box key={node.key}>
+        {isCollapsed && depth === 0 ? (
+          <Tooltip title={tooltipContent || node.title} placement="right" arrow>
+            {button}
+          </Tooltip>
+        ) : disabled ? (
+          <Tooltip title="Not built yet" placement="right">
+            {button}
+          </Tooltip>
+        ) : (
+          button
+        )}
+
+        {node.divider_after && !isCollapsed && (
+          <Divider sx={{ my: 1, mx: 1 }} />
+        )}
+
+        {hasChildren && !isCollapsed && (
+          <Collapse in={open} timeout="auto" unmountOnExit>
+            <List disablePadding>{children.map((child) => renderItem(child, depth + 1))}</List>
+          </Collapse>
+        )}
+      </Box>
+    )
+  }
+
+  const drawer = (
+    <Box 
+      sx={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        height: '100%', 
+        bgcolor: tokens.rail,
+        overflow: 'hidden', // Prevent double scrollbar
+      }}
+      onMouseEnter={() => sidebar.setHovering(true)}
+      onMouseLeave={() => sidebar.setHovering(false)}
+    >
+      {/* Scrollable Menu Area */}
+      <Box 
+        sx={{ 
+          flex: 1, 
+          overflowY: 'auto', 
+          overflowX: 'hidden',
+          px: isCollapsed ? 0.5 : 1, 
+          py: 1.5,
+          // Custom scrollbar styling
+          '&::-webkit-scrollbar': {
+            width: '6px',
+          },
+          '&::-webkit-scrollbar-track': {
+            background: 'transparent',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: alpha('#000', 0.2),
+            borderRadius: '3px',
+            '&:hover': {
+              background: alpha('#000', 0.3),
+            },
+          },
+        }}
+      >
+        {menu.isLoading ? (
+          <Box sx={{ px: 0.5 }}>
+            {Array.from({ length: 9 }).map((_, index) => (
+              <Skeleton key={index} height={32} sx={{ my: 0.5, borderRadius: 1 }} />
+            ))}
+          </Box>
+        ) : (
+          sections.map((section) => (
+            <Box key={section.section} sx={{ mb: 1.5 }}>
+              {!isCollapsed && (
+                <Typography
+                  sx={{
+                    px: 1,
+                    mb: 0.5,
+                    display: 'block',
+                    color: tokens.subdued,
+                    fontWeight: 600,
+                    fontSize: 12,
+                  }}
+                >
+                  {section.section}
+                </Typography>
+              )}
+              <List disablePadding>{section.items.map((item) => renderItem(item))}</List>
+            </Box>
+          ))
+        )}
+      </Box>
+
+      {/* Fixed Footer - Always at Bottom */}
+      <Box sx={{ flexShrink: 0 }}>
+        <Divider sx={{ borderColor: 'rgba(0,0,0,0.08)' }} />
+        
+        {/* User Info and Toggle Button */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: isCollapsed ? 'center' : 'space-between',
+            gap: 1.5,
+            p: isCollapsed ? 1 : 1.5,
+            backgroundColor: alpha('#000', 0.02),
+            transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+            '&:hover': {
+              backgroundColor: alpha('#000', 0.04),
+            },
+          }}
+        >
+          {/* User Profile - Hidden in collapsed mode */}
+          {!isCollapsed && (
+            <>
+              {/* User Avatar */}
+              <Avatar
+                sx={{
+                  width: 32,
+                  height: 32,
+                  bgcolor: '#5C5C5C',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: '#FFFFFF',
+                  flexShrink: 0,
+                }}
+              >
+                {initials || '?'}
+              </Avatar>
+
+              {/* User Info */}
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="caption" noWrap sx={{ display: 'block', color: tokens.subdued, fontWeight: 600 }}>
+                  {admin?.email}
+                </Typography>
+                <Typography variant="caption" sx={{ display: 'block', color: tokens.faint }}>
+                  {isSuperAdmin ? 'Super admin' : (admin?.roles ?? []).map((r) => r.name).join(', ') || 'No role'}
+                </Typography>
+              </Box>
+            </>
+          )}
+
+          {/* Toggle Button - Different icons for collapsed/expanded */}
+          <Tooltip 
+            title={isCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
+            placement="right"
+            arrow
+          >
+            <IconButton
+              onClick={sidebar.toggleCollapse}
+              size="small"
+              sx={{
+                flexShrink: 0,
+                bgcolor: isCollapsed ? alpha('#667eea', 0.1) : 'background.paper',
+                border: '1px solid',
+                borderColor: isCollapsed ? '#667eea' : 'divider',
+                width: 28,
+                height: 28,
+                color: isCollapsed ? '#667eea' : 'text.secondary',
+                '&:hover': {
+                  bgcolor: isCollapsed ? alpha('#667eea', 0.2) : 'action.hover',
+                  transform: 'scale(1.1)',
+                  borderColor: '#667eea',
+                },
+                transition: 'all 200ms ease',
+              }}
+            >
+              {isCollapsed ? (
+                <MenuOpenIcon sx={{ fontSize: 16 }} />
+              ) : (
+                <MenuIcon2 sx={{ fontSize: 16 }} />
+              )}
+            </IconButton>
+          </Tooltip>
+        </Box>
+      </Box>
+    </Box>
+  )
+
+  return (
+    <Box sx={{ display: 'flex', minHeight: '100dvh', bgcolor: tokens.surface }}>
+      {/*
+        Shopify's top bar is near-black and full width, with the store name on
+        the left and a search field taking the middle. It is the frame the rest
+        of the chrome hangs off, so it stays dark even though everything below
+        is light.
+      */}
+      <AppBar
+        position="fixed"
+        elevation={0}
+        sx={{ zIndex: (t) => t.zIndex.drawer + 1, bgcolor: tokens.topbar }}
+      >
+        <Toolbar sx={{ gap: 1.5, minHeight: `${TOPBAR_HEIGHT}px !important`, px: { xs: 1.5, md: 2 } }}>
+          <IconButton
+            edge="start"
+            onClick={() => setMobileOpen((open) => !open)}
+            sx={{ display: { md: 'none' }, color: '#E3E3E3' }}
+            aria-label="Toggle navigation"
+          >
+            <MenuIcon />
+          </IconButton>
+
+          {/* The wordmark lives here, not in the rail â€” Shopify puts the store
+              identity in the dark bar and gives the nav its full height. */}
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ 
+              alignItems: 'baseline', 
+              width: { md: drawerWidth - 32 }, 
+              flexShrink: 0,
+              transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+            }}
+          >
+            <Typography
+              sx={{ color: '#FFFFFF', fontWeight: 700, letterSpacing: '0.16em', fontSize: 14 }}
+            >
+              VEYLOR
+            </Typography>
+            {!isCollapsed && (
+              <Typography sx={{ color: '#B5B5B5', fontSize: 12 }}>admin</Typography>
+            )}
+          </Stack>
+
+          <Box
+            sx={{
+              flex: 1,
+              maxWidth: 520,
+              mx: 'auto',
+              display: { xs: 'none', sm: 'flex' },
+              alignItems: 'center',
+              gap: 1,
+              bgcolor: '#303030',
+              border: '1px solid #616161',
+              borderRadius: '8px',
+              px: 1.25,
+              height: 32,
+              '&:focus-within': { borderColor: '#8A8A8A', bgcolor: '#3D3D3D' },
+            }}
+          >
+            <SearchIcon sx={{ fontSize: 17, color: '#B5B5B5' }} />
+            <InputBase
+              placeholder="Search"
+              inputProps={{ 'aria-label': 'Search the admin' }}
+              sx={{ flex: 1, color: '#E3E3E3', fontSize: 13, '& input::placeholder': { color: '#B5B5B5', opacity: 1 } }}
+            />
+          </Box>
+
+          <Box sx={{ flex: { xs: 1, sm: 0 } }} />
+
+          <Tooltip title={admin?.email ?? ''}>
+            <IconButton onClick={(event) => setAnchor(event.currentTarget)} sx={{ p: 0.5 }}>
+              <Avatar
+                sx={{ width: 26, height: 26, bgcolor: '#5C5C5C', fontSize: 11, fontWeight: 600, color: '#FFFFFF' }}
+              >
+                {initials || '?'}
+              </Avatar>
+            </IconButton>
+          </Tooltip>
+          <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
+            <MenuItem
+              onClick={async () => {
+                setAnchor(null)
+                await logout()
+                navigate('/login', { replace: true })
+              }}
+            >
+              <ListItemIcon>
+                <LogoutIcon sx={{ fontSize: 17 }} />
+              </ListItemIcon>
+              Sign out
+            </MenuItem>
+          </Menu>
+        </Toolbar>
+      </AppBar>
+
+      <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          sx={{
+            display: { xs: 'block', md: 'none' },
+            '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box', bgcolor: tokens.rail },
+          }}
+        >
+          {drawer}
+        </Drawer>
+        <Drawer
+          variant="permanent"
+          open
+          sx={{
+            display: { xs: 'none', md: 'block' },
+            '& .MuiDrawer-paper': {
+              width: drawerWidth,
+              boxSizing: 'border-box',
+              border: 0,
+              bgcolor: tokens.rail,
+              transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+              overflowX: 'hidden',
+            },
+          }}
+        >
+          <Toolbar sx={{ minHeight: `${TOPBAR_HEIGHT}px !important` }} />
+          {drawer}
+        </Drawer>
+      </Box>
+
+      <Box component="main" sx={{ flexGrow: 1, minWidth: 0, px: { xs: 2, md: 3 }, pb: 6 }}>
+        <Toolbar sx={{ minHeight: `${TOPBAR_HEIGHT}px !important` }} />
+        <Box sx={{ maxWidth: CONTENT_MAX, mx: 'auto', pt: 3 }}>
+          <Outlet />
+        </Box>
+      </Box>
+    </Box>
+  )
+}
+)) {
+        // Exact match: /customers$ matches only /customers
+        return pathname === pattern.slice(0, -1)
+      }
+      // Prefix match: /customers matches /customers and /customers/anything
+      return pathname.startsWith(pattern)
+    })
+  }
+  
+  // Fallback: exact match for route
+  return pathname === node.route
+}
+
+export function AppLayout() {
+  const { admin, logout, isSuperAdmin } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const menu = useNavigation()
+  const sidebar = useSidebar()
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+
+  const sections = useMemo(() => menu.data?.sections ?? [], [menu.data])
+  const isCollapsed = sidebar.isCollapsed && !sidebar.isHovering
+  const drawerWidth = sidebar.width
+
+  // Auto-expand whichever group contains the current route, so a deep link
+  // lands with its parent already open.
+  useEffect(() => {
+    if (sections.length === 0) return
+    setExpanded((current) => {
+      const next = { ...current }
+      for (const section of sections) {
+        for (const item of section.items) {
+          if (item.children.length === 0) continue
+          const active = item.children.some((child) => isRouteActive(child, location.pathname))
+          if (active) next[item.key] = true
+        }
+      }
+      return next
+    })
+  }, [sections, location.pathname])
+
+  const initials = `${admin?.first_name?.[0] ?? ''}${admin?.last_name?.[0] ?? ''}`.toUpperCase()
+
+  const renderItem = (node: MenuNode, depth = 0) => {
+    const Icon = menuIcon(node.icon)
+    const navigable = isNavigable(node)
+    const children = node.children
+    const hasChildren = children.length > 0
+    const open = expanded[node.key] ?? false
+
+    // A group whose children are all unbuilt is itself not worth expanding.
+    const groupUsable = hasChildren && children.some(hasNavigableDescendant)
+    const disabled = !navigable && !groupUsable
+
+    // Apply icon color from database
+    const iconColor = node.icon_color || 'inherit'
+
+    const inner = (
+      <>
+        <ListItemIcon sx={{ 
+          minWidth: isCollapsed ? 0 : 26,
+          justifyContent: 'center',
+          color: iconColor,
+          mx: isCollapsed ? 'auto' : 0,
+        }}>
+          {node.badge ? (
+            <Badge
+              badgeContent={node.badge.count}
+              max={99}
+              color={node.badge.variant === 'default' ? 'primary' : node.badge.variant}
+              sx={{ '& .MuiBadge-badge': { fontSize: 9, height: 14, minWidth: 14 } }}
+            >
+              <Icon sx={{ fontSize: 18 }} />
+            </Badge>
+          ) : (
+            <Icon sx={{ fontSize: 18 }} />
+          )}
+        </ListItemIcon>
+        {!isCollapsed && (
+          <>
+            <ListItemText
+              primary={node.title}
+              slotProps={{
+                primary: {
+                  variant: 'body2',
+                  noWrap: true,
+                  sx: { fontWeight: 500, fontSize: 13 },
+                },
+              }}
+            />
+            {/* Keyboard Shortcut Display - Commented out for now */}
+            {/* {node.keyboard_shortcut && depth === 0 && (
+              <Chip
+                label={node.keyboard_shortcut}
+                size="small"
+                sx={{
+                  height: 17,
+                  fontSize: 10,
+                  bgcolor: alpha('#000', 0.06),
+                  mr: 0.5,
+                }}
+              />
+            )} */}
+            {disabled && (
+              <Chip
+                label="Soon"
+                sx={{ height: 17, fontSize: 10, bgcolor: '#DEDEDE', color: tokens.subdued, ml: 0.5 }}
+              />
+            )}
+            {/* Only show expand/collapse arrows when NOT collapsed */}
+            {hasChildren && (
+              open ? (
+                <ExpandLessIcon sx={{ fontSize: 16, color: tokens.faint }} />
+              ) : (
+                <ExpandMoreIcon sx={{ fontSize: 16, color: tokens.faint }} />
+              )
+            )}
+          </>
+        )}
+      </>
+    )
+
+    const sx = {
+      borderRadius: '8px',
+      minHeight: 32,
+      mb: '2px',
+      pl: isCollapsed ? 0.5 : (depth === 0 ? 1 : 3.25),
+      pr: isCollapsed ? 0.5 : 1,
+      py: 0.25,
+      justifyContent: isCollapsed ? 'center' : 'flex-start',
+      color: tokens.ink,
+      opacity: disabled ? 0.5 : 1,
+      transition: 'all 200ms ease',
+      '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+      '&.active': {
+        bgcolor: tokens.selected,
+        color: tokens.inkStrong,
+        boxShadow: '0 1px 2px rgba(26,26,26,0.12)',
+        '& .MuiListItemIcon-root': { color: tokens.inkStrong },
+        '& .MuiListItemText-primary': { fontWeight: 600 },
+      },
+    } as const
+
+    const button = navigable && !hasChildren ? (
+      <ListItemButton component={NavLink} to={node.route!} onClick={() => setMobileOpen(false)} sx={sx}>
+        {inner}
+      </ListItemButton>
+    ) : (
+      <Box component="span">
+        <ListItemButton
+          disabled={disabled}
+          onClick={() => {
+            if (hasChildren) {
+              setExpanded((current) => ({ ...current, [node.key]: !open }))
+              return
+            }
+            if (navigable) {
+              navigate(node.route!)
+              setMobileOpen(false)
+            }
+          }}
+          sx={{ ...sx, width: '100%' }}
+        >
+          {inner}
+        </ListItemButton>
+      </Box>
+    )
+
+    const tooltipContent = isCollapsed ? (
+      <Box>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          {node.title}
+        </Typography>
+        {node.hover_description && (
+          <Typography variant="caption" sx={{ opacity: 0.8 }}>
+            {node.hover_description}
+          </Typography>
+        )}
+      </Box>
+    ) : null
+
+    return (
+      <Box key={node.key}>
+        {isCollapsed && depth === 0 ? (
+          <Tooltip title={tooltipContent || node.title} placement="right" arrow>
+            {button}
+          </Tooltip>
+        ) : disabled ? (
+          <Tooltip title="Not built yet" placement="right">
+            {button}
+          </Tooltip>
+        ) : (
+          button
+        )}
+
+        {node.divider_after && !isCollapsed && (
+          <Divider sx={{ my: 1, mx: 1 }} />
+        )}
+
+        {hasChildren && !isCollapsed && (
+          <Collapse in={open} timeout="auto" unmountOnExit>
+            <List disablePadding>{children.map((child) => renderItem(child, depth + 1))}</List>
+          </Collapse>
+        )}
+      </Box>
+    )
+  }
+
+  const drawer = (
+    <Box 
+      sx={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        height: '100%', 
+        bgcolor: tokens.rail,
+        overflow: 'hidden', // Prevent double scrollbar
+      }}
+      onMouseEnter={() => sidebar.setHovering(true)}
+      onMouseLeave={() => sidebar.setHovering(false)}
+    >
+      {/* Scrollable Menu Area */}
+      <Box 
+        sx={{ 
+          flex: 1, 
+          overflowY: 'auto', 
+          overflowX: 'hidden',
+          px: isCollapsed ? 0.5 : 1, 
+          py: 1.5,
+          // Custom scrollbar styling
+          '&::-webkit-scrollbar': {
+            width: '6px',
+          },
+          '&::-webkit-scrollbar-track': {
+            background: 'transparent',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: alpha('#000', 0.2),
+            borderRadius: '3px',
+            '&:hover': {
+              background: alpha('#000', 0.3),
+            },
+          },
+        }}
+      >
+        {menu.isLoading ? (
+          <Box sx={{ px: 0.5 }}>
+            {Array.from({ length: 9 }).map((_, index) => (
+              <Skeleton key={index} height={32} sx={{ my: 0.5, borderRadius: 1 }} />
+            ))}
+          </Box>
+        ) : (
+          sections.map((section) => (
+            <Box key={section.section} sx={{ mb: 1.5 }}>
+              {!isCollapsed && (
+                <Typography
+                  sx={{
+                    px: 1,
+                    mb: 0.5,
+                    display: 'block',
+                    color: tokens.subdued,
+                    fontWeight: 600,
+                    fontSize: 12,
+                  }}
+                >
+                  {section.section}
+                </Typography>
+              )}
+              <List disablePadding>{section.items.map((item) => renderItem(item))}</List>
+            </Box>
+          ))
+        )}
+      </Box>
+
+      {/* Fixed Footer - Always at Bottom */}
+      <Box sx={{ flexShrink: 0 }}>
+        <Divider sx={{ borderColor: 'rgba(0,0,0,0.08)' }} />
+        
+        {/* User Info and Toggle Button */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: isCollapsed ? 'center' : 'space-between',
+            gap: 1.5,
+            p: isCollapsed ? 1 : 1.5,
+            backgroundColor: alpha('#000', 0.02),
+            transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+            '&:hover': {
+              backgroundColor: alpha('#000', 0.04),
+            },
+          }}
+        >
+          {/* User Profile - Hidden in collapsed mode */}
+          {!isCollapsed && (
+            <>
+              {/* User Avatar */}
+              <Avatar
+                sx={{
+                  width: 32,
+                  height: 32,
+                  bgcolor: '#5C5C5C',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: '#FFFFFF',
+                  flexShrink: 0,
+                }}
+              >
+                {initials || '?'}
+              </Avatar>
+
+              {/* User Info */}
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="caption" noWrap sx={{ display: 'block', color: tokens.subdued, fontWeight: 600 }}>
+                  {admin?.email}
+                </Typography>
+                <Typography variant="caption" sx={{ display: 'block', color: tokens.faint }}>
+                  {isSuperAdmin ? 'Super admin' : (admin?.roles ?? []).map((r) => r.name).join(', ') || 'No role'}
+                </Typography>
+              </Box>
+            </>
+          )}
+
+          {/* Toggle Button - Different icons for collapsed/expanded */}
+          <Tooltip 
+            title={isCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
+            placement="right"
+            arrow
+          >
+            <IconButton
+              onClick={sidebar.toggleCollapse}
+              size="small"
+              sx={{
+                flexShrink: 0,
+                bgcolor: isCollapsed ? alpha('#667eea', 0.1) : 'background.paper',
+                border: '1px solid',
+                borderColor: isCollapsed ? '#667eea' : 'divider',
+                width: 28,
+                height: 28,
+                color: isCollapsed ? '#667eea' : 'text.secondary',
+                '&:hover': {
+                  bgcolor: isCollapsed ? alpha('#667eea', 0.2) : 'action.hover',
+                  transform: 'scale(1.1)',
+                  borderColor: '#667eea',
+                },
+                transition: 'all 200ms ease',
+              }}
+            >
+              {isCollapsed ? (
+                <MenuOpenIcon sx={{ fontSize: 16 }} />
+              ) : (
+                <MenuIcon2 sx={{ fontSize: 16 }} />
+              )}
+            </IconButton>
+          </Tooltip>
+        </Box>
+      </Box>
+    </Box>
+  )
+
+  return (
+    <Box sx={{ display: 'flex', minHeight: '100dvh', bgcolor: tokens.surface }}>
+      {/*
+        Shopify's top bar is near-black and full width, with the store name on
+        the left and a search field taking the middle. It is the frame the rest
+        of the chrome hangs off, so it stays dark even though everything below
+        is light.
+      */}
+      <AppBar
+        position="fixed"
+        elevation={0}
+        sx={{ zIndex: (t) => t.zIndex.drawer + 1, bgcolor: tokens.topbar }}
+      >
+        <Toolbar sx={{ gap: 1.5, minHeight: `${TOPBAR_HEIGHT}px !important`, px: { xs: 1.5, md: 2 } }}>
+          <IconButton
+            edge="start"
+            onClick={() => setMobileOpen((open) => !open)}
+            sx={{ display: { md: 'none' }, color: '#E3E3E3' }}
+            aria-label="Toggle navigation"
+          >
+            <MenuIcon />
+          </IconButton>
+
+          {/* The wordmark lives here, not in the rail â€” Shopify puts the store
+              identity in the dark bar and gives the nav its full height. */}
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ 
+              alignItems: 'baseline', 
+              width: { md: drawerWidth - 32 }, 
+              flexShrink: 0,
+              transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+            }}
+          >
+            <Typography
+              sx={{ color: '#FFFFFF', fontWeight: 700, letterSpacing: '0.16em', fontSize: 14 }}
+            >
+              VEYLOR
+            </Typography>
+            {!isCollapsed && (
+              <Typography sx={{ color: '#B5B5B5', fontSize: 12 }}>admin</Typography>
+            )}
+          </Stack>
+
+          <Box
+            sx={{
+              flex: 1,
+              maxWidth: 520,
+              mx: 'auto',
+              display: { xs: 'none', sm: 'flex' },
+              alignItems: 'center',
+              gap: 1,
+              bgcolor: '#303030',
+              border: '1px solid #616161',
+              borderRadius: '8px',
+              px: 1.25,
+              height: 32,
+              '&:focus-within': { borderColor: '#8A8A8A', bgcolor: '#3D3D3D' },
+            }}
+          >
+            <SearchIcon sx={{ fontSize: 17, color: '#B5B5B5' }} />
+            <InputBase
+              placeholder="Search"
+              inputProps={{ 'aria-label': 'Search the admin' }}
+              sx={{ flex: 1, color: '#E3E3E3', fontSize: 13, '& input::placeholder': { color: '#B5B5B5', opacity: 1 } }}
+            />
+          </Box>
+
+          <Box sx={{ flex: { xs: 1, sm: 0 } }} />
+
+          <Tooltip title={admin?.email ?? ''}>
+            <IconButton onClick={(event) => setAnchor(event.currentTarget)} sx={{ p: 0.5 }}>
+              <Avatar
+                sx={{ width: 26, height: 26, bgcolor: '#5C5C5C', fontSize: 11, fontWeight: 600, color: '#FFFFFF' }}
+              >
+                {initials || '?'}
+              </Avatar>
+            </IconButton>
+          </Tooltip>
+          <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
+            <MenuItem
+              onClick={async () => {
+                setAnchor(null)
+                await logout()
+                navigate('/login', { replace: true })
+              }}
+            >
+              <ListItemIcon>
+                <LogoutIcon sx={{ fontSize: 17 }} />
+              </ListItemIcon>
+              Sign out
+            </MenuItem>
+          </Menu>
+        </Toolbar>
+      </AppBar>
+
+      <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          sx={{
+            display: { xs: 'block', md: 'none' },
+            '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box', bgcolor: tokens.rail },
+          }}
+        >
+          {drawer}
+        </Drawer>
+        <Drawer
+          variant="permanent"
+          open
+          sx={{
+            display: { xs: 'none', md: 'block' },
+            '& .MuiDrawer-paper': {
+              width: drawerWidth,
+              boxSizing: 'border-box',
+              border: 0,
+              bgcolor: tokens.rail,
+              transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+              overflowX: 'hidden',
+            },
+          }}
+        >
+          <Toolbar sx={{ minHeight: `${TOPBAR_HEIGHT}px !important` }} />
+          {drawer}
+        </Drawer>
+      </Box>
+
+      <Box component="main" sx={{ flexGrow: 1, minWidth: 0, px: { xs: 2, md: 3 }, pb: 6 }}>
+        <Toolbar sx={{ minHeight: `${TOPBAR_HEIGHT}px !important` }} />
+        <Box sx={{ maxWidth: CONTENT_MAX, mx: 'auto', pt: 3 }}>
+          <Outlet />
+        </Box>
+      </Box>
+    </Box>
+  )
+}
+
+

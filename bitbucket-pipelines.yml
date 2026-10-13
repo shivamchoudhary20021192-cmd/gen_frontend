@@ -1,0 +1,86 @@
+# Bitbucket Pipeline - Veylog Admin Frontend
+# Deploys to EC2 Nginx serving at /admin path
+
+image: node:20
+
+definitions:
+  caches:
+    npm: ~/.npm
+  
+  steps:
+    - step: &build
+        name: Build Admin Frontend
+        caches:
+          - npm
+        script:
+          - echo "Installing dependencies..."
+          - npm ci
+          - echo "Building admin frontend for production..."
+          - echo "VITE_API_URL=https://$DOMAIN/api" > .env.production
+          - npm run build
+          - echo "Build complete! dist/ folder created"
+          - ls -la dist/
+        artifacts:
+          - dist/**
+    
+    - step: &deploy-to-staging
+        name: Deploy Admin to Staging
+        deployment: staging
+        trigger: manual
+        script:
+          - echo "Deploying admin frontend to staging..."
+          - pipe: atlassian/rsync-deploy:0.4.4
+            variables:
+              USER: $SSH_USER
+              SERVER: $EC2_SERVER
+              REMOTE_PATH: '/var/www/admin'
+              LOCAL_PATH: 'dist'
+              DELETE_FLAG: 'true'
+          - pipe: atlassian/ssh-run:0.4.1
+            variables:
+              SSH_USER: $SSH_USER
+              SERVER: $EC2_SERVER
+              COMMAND: |
+                sudo chown -R www-data:www-data /var/www/admin
+                sudo systemctl reload nginx
+                echo "✅ Admin frontend deployed to staging!"
+    
+    - step: &deploy-to-production
+        name: Deploy Admin to Production
+        deployment: production
+        trigger: manual
+        script:
+          - echo "Deploying admin frontend to production..."
+          - pipe: atlassian/rsync-deploy:0.4.4
+            variables:
+              USER: $SSH_USER
+              SERVER: $EC2_SERVER
+              REMOTE_PATH: '/var/www/admin'
+              LOCAL_PATH: 'dist'
+              DELETE_FLAG: 'true'
+          - pipe: atlassian/ssh-run:0.4.1
+            variables:
+              SSH_USER: $SSH_USER
+              SERVER: $EC2_SERVER
+              COMMAND: |
+                sudo chown -R www-data:www-data /var/www/admin
+                sudo systemctl reload nginx
+                echo "✅ Admin frontend deployed to production!"
+                echo "Admin URL: https://$DOMAIN/admin"
+
+pipelines:
+  default:
+    - step: *build
+  
+  branches:
+    develop:
+      - step: *build
+      - step: *deploy-to-staging
+    
+    main:
+      - step: *build
+      - step: *deploy-to-production
+  
+  pull-requests:
+    '**':
+      - step: *build
